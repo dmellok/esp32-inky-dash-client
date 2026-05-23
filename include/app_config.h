@@ -98,6 +98,9 @@
 #ifndef MQTT_DEFAULT_CONFIG_TOPIC
 #define MQTT_DEFAULT_CONFIG_TOPIC "inky/esp32/config"
 #endif
+#ifndef MQTT_DEFAULT_STATUS_TOPIC
+#define MQTT_DEFAULT_STATUS_TOPIC "inky/esp32/status"
+#endif
 #ifndef MQTT_DEFAULT_USER
 #define MQTT_DEFAULT_USER   ""
 #endif

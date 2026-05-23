@@ -25,6 +25,7 @@
 
 #include "app_config.h"
 #include "epd_driver.h"
+#include "heartbeat.h"
 #include "image_decoder.h"
 #include "image_fetcher.h"
 #include "mqtt_handler.h"
@@ -182,8 +183,11 @@ void app_main(void)
         return;
     }
 
+    char heartbeat[160];
+    heartbeat_format_json(heartbeat, sizeof(heartbeat));
+
     mqtt_job_t job;
-    err = mqtt_fetch_retained(&job);
+    err = mqtt_fetch_retained(&job, heartbeat);
     if (err != ESP_OK || !job.url[0]) {
         ESP_LOGI(TAG, "no retained job (%s); back to sleep",
                  esp_err_to_name(err));

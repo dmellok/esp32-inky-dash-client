@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "main.c"
         "epd_driver.c"
+        "heartbeat.c"
         "wifi_manager.c"
         "provisioning.c"
         "mqtt_config.c"
@@ -13,6 +14,7 @@ idf_component_register(
         "../include"
     REQUIRES
         driver
+        esp_adc
         esp_driver_usb_serial_jtag
         esp_event
         esp_http_client

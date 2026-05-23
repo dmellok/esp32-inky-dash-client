@@ -21,6 +21,8 @@ typedef struct {
     mqtt_job_t *out;
     const char *update_topic;
     const char *config_topic;
+    const char *status_topic;
+    const char *heartbeat_json;     /* may be NULL or empty */
 } ctx_t;
 
 /* ---------- payload parsers ---------- */
@@ -137,6 +139,14 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
                  ctx->update_topic, ctx->config_topic);
         esp_mqtt_client_subscribe(e->client, ctx->update_topic, 1);
         esp_mqtt_client_subscribe(e->client, ctx->config_topic, 1);
+        if (ctx->heartbeat_json && ctx->heartbeat_json[0]) {
+            int len = strlen(ctx->heartbeat_json);
+            ESP_LOGI(TAG, "publishing heartbeat to %s (%d bytes)",
+                     ctx->status_topic, len);
+            esp_mqtt_client_publish(e->client, ctx->status_topic,
+                                    ctx->heartbeat_json, len,
+                                    /* qos */ 1, /* retain */ 1);
+        }
         break;
 
     case MQTT_EVENT_DATA:
@@ -169,7 +179,7 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 
 /* ---------- public API ---------- */
 
-esp_err_t mqtt_fetch_retained(mqtt_job_t *job)
+esp_err_t mqtt_fetch_retained(mqtt_job_t *job, const char *heartbeat_json)
 {
     if (!job) return ESP_ERR_INVALID_ARG;
     memset(job, 0, sizeof(*job));
@@ -182,6 +192,8 @@ esp_err_t mqtt_fetch_retained(mqtt_job_t *job)
         .out = job,
         .update_topic = cfg_nvs.topic,
         .config_topic = MQTT_DEFAULT_CONFIG_TOPIC,
+        .status_topic = MQTT_DEFAULT_STATUS_TOPIC,
+        .heartbeat_json = heartbeat_json,
     };
 
     esp_mqtt_client_config_t cfg = {
