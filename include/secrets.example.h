@@ -27,9 +27,10 @@
 // #define MQTT_DEFAULT_PASS  "broker-pass"
 
 /* ---- Dev mode ------------------------------------------------------ */
-/* Replace the 15-min deep sleep with a short delay + software restart
- * loop, so you can publish/test/repeat without waiting. The cold-boot
- * splash is skipped on software restart, so each iteration is fast
- * (~10 s instead of ~40 s with splash). Comment out for production. */
+/* The firmware auto-detects a connected USB host (laptop) and skips deep
+ * sleep in that case, so you usually DON'T need DEV_DISABLE_SLEEP just
+ * for development. Define it only when you want to force the loop without
+ * a USB host (e.g. wall-mounted install on a USB charger -- the charger
+ * doesn't emit SOF packets so auto-detection treats it as battery). */
 // #define DEV_DISABLE_SLEEP
 // #define DEV_LOOP_INTERVAL_S 10                /* defaults to 10 */

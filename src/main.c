@@ -14,6 +14,7 @@
 
 #include <string.h>
 
+#include "driver/usb_serial_jtag.h"
 #include "esp_log.h"
 #include "esp_sleep.h"
 #include "esp_system.h"
@@ -70,17 +71,35 @@ static void store_hash(const char *hash)
 
 static void sleep_forever_or_until_timer(void)
 {
+    /* Decide between deep sleep (battery) and short-delay restart loop
+     * (dev). Either DEV_DISABLE_SLEEP forces the loop, OR a connected
+     * USB host (laptop / SOF-emitting host) auto-selects it -- a bare
+     * USB charger / power bank doesn't emit SOFs and is treated as
+     * battery operation. */
+    bool loop = false;
+    const char *reason = NULL;
+
 #ifdef DEV_DISABLE_SLEEP
-    ESP_LOGI(TAG, "DEV mode: software restart in %d s", DEV_LOOP_INTERVAL_S);
-    vTaskDelay(pdMS_TO_TICKS(DEV_LOOP_INTERVAL_S * 1000));
-    esp_restart();
+    loop = true;
+    reason = "DEV_DISABLE_SLEEP";
 #else
-    ESP_LOGI(TAG, "deep sleep for %d s", SLEEP_INTERVAL_S);
+    if (usb_serial_jtag_is_connected()) {
+        loop = true;
+        reason = "USB host detected";
+    }
+#endif
+
+    if (loop) {
+        ESP_LOGI(TAG, "%s: software restart in %d s", reason, DEV_LOOP_INTERVAL_S);
+        vTaskDelay(pdMS_TO_TICKS(DEV_LOOP_INTERVAL_S * 1000));
+        esp_restart();
+    }
+
+    ESP_LOGI(TAG, "on battery; deep sleep for %d s", SLEEP_INTERVAL_S);
     /* epd_sleep() already dropped the panel power rail; no extra cleanup
      * needed before going down. */
     esp_sleep_enable_timer_wakeup((uint64_t)SLEEP_INTERVAL_S * 1000000ULL);
     esp_deep_sleep_start();
-#endif
     /* not reached */
 }
 

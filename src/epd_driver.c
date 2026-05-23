@@ -109,14 +109,19 @@ static void cmd_with_data(uint8_t cmd, const uint8_t *buf, size_t len)
     send_data_buf(buf, len);
 }
 
-/* Block until BUSY goes HIGH (idle). Panel pulls it LOW while busy. */
+/* Block until BUSY goes HIGH (idle). Panel pulls it LOW while busy.
+ * A full Spectra 6 refresh takes ~25-30s, so we only warn after 60s --
+ * anything beyond that suggests an actually-stuck panel rather than
+ * normal refresh time. */
 static void wait_idle(void)
 {
     int ticks = 0;
+    bool warned = false;
     while (gpio_get_level(EPD_PIN_BUSY) == 0) {
         vTaskDelay(pdMS_TO_TICKS(10));
-        if (++ticks % 500 == 0) {
-            ESP_LOGW(TAG, "BUSY still low after %d ms", ticks * 10);
+        if (!warned && ++ticks >= 6000) {
+            ESP_LOGW(TAG, "BUSY still low after 60 s -- panel may be stuck");
+            warned = true;
         }
     }
 }
