@@ -1,9 +1,22 @@
 /*
  * Project-wide tunables. Edit here, not scattered across .c files.
+ *
+ * For local credential overrides (dev shortcut to bypass the captive
+ * portal), copy include/secrets.example.h to include/secrets.h and fill
+ * in the WIFI_DEFAULT_* / MQTT_DEFAULT_* macros there. secrets.h is
+ * git-ignored.
  */
 #pragma once
 
 #include <stdint.h>
+
+/* Pull in user-local overrides if they exist. Falls through silently if
+ * secrets.h hasn't been created -- the build doesn't depend on it. */
+#if defined(__has_include)
+#  if __has_include("secrets.h")
+#    include "secrets.h"
+#  endif
+#endif
 
 /* ------------------------------------------------------------------ */
 /* Panel: Waveshare ESP32-S3-ePaper-13.3E6                            */
@@ -60,17 +73,33 @@
 #define PROVISION_AP_PASS    "inkydash"     /* >= 8 chars or use open AP */
 
 /* ------------------------------------------------------------------ */
-/* MQTT contract                                                      */
+/* WiFi / MQTT compile-time defaults                                  */
 /* ------------------------------------------------------------------ */
-/* These are FALLBACKS used only if NVS doesn't have user-set values
- * (e.g. an early boot that crashed before provisioning finished). The
- * captive portal writes user-supplied broker URI / topic / credentials
- * into NVS and mqtt_handler reads from there. */
+/* Precedence on each wake:
+ *     NVS (set via portal)  >  these defaults  >  empty (portal triggers)
+ *
+ * secrets.h may override any of these; otherwise WiFi defaults to empty
+ * (no auto-connect) and MQTT defaults to placeholders that will fail
+ * gracefully if the user hasn't run the portal yet. */
+
+#ifndef WIFI_DEFAULT_SSID
+#define WIFI_DEFAULT_SSID   ""
+#endif
+#ifndef WIFI_DEFAULT_PASS
+#define WIFI_DEFAULT_PASS   ""
+#endif
+
 #ifndef MQTT_DEFAULT_URI
 #define MQTT_DEFAULT_URI    "mqtt://homeassistant.local:1883"
 #endif
 #ifndef MQTT_DEFAULT_TOPIC
 #define MQTT_DEFAULT_TOPIC  "inky/esp32/update"
+#endif
+#ifndef MQTT_DEFAULT_USER
+#define MQTT_DEFAULT_USER   ""
+#endif
+#ifndef MQTT_DEFAULT_PASS
+#define MQTT_DEFAULT_PASS   ""
 #endif
 #ifndef MQTT_CLIENT_ID
 #define MQTT_CLIENT_ID      "esp-inky-dash"

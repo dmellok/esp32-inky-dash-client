@@ -71,11 +71,16 @@ esp_err_t wifi_manager_init(void)
 bool wifi_creds_present(void)
 {
     nvs_handle_t h;
-    if (nvs_open(NVS_NS_WIFI, NVS_READONLY, &h) != ESP_OK) return false;
-    size_t len = 0;
-    esp_err_t err = nvs_get_str(h, NVS_KEY_SSID, NULL, &len);
-    nvs_close(h);
-    return (err == ESP_OK) && (len > 1);   /* len includes NUL */
+    if (nvs_open(NVS_NS_WIFI, NVS_READONLY, &h) == ESP_OK) {
+        size_t len = 0;
+        esp_err_t err = nvs_get_str(h, NVS_KEY_SSID, NULL, &len);
+        nvs_close(h);
+        if (err == ESP_OK && len > 1) return true;
+    }
+    /* Fallback: secrets.h compile-time default counts as "have creds" too,
+     * so a dev board boots straight into STA without round-tripping the
+     * captive portal. */
+    return WIFI_DEFAULT_SSID[0] != '\0';
 }
 
 esp_err_t wifi_creds_save(const char *ssid, const char *pass)
@@ -96,19 +101,27 @@ esp_err_t wifi_creds_save(const char *ssid, const char *pass)
 static esp_err_t load_creds(char *ssid, size_t ssid_sz, char *pass, size_t pass_sz)
 {
     nvs_handle_t h;
-    esp_err_t err = nvs_open(NVS_NS_WIFI, NVS_READONLY, &h);
-    if (err != ESP_OK) return err;
-
-    size_t l = ssid_sz;
-    err = nvs_get_str(h, NVS_KEY_SSID, ssid, &l);
-    if (err != ESP_OK) { nvs_close(h); return err; }
-
-    l = pass_sz;
-    err = nvs_get_str(h, NVS_KEY_PASS, pass, &l);
-    if (err == ESP_ERR_NVS_NOT_FOUND) { pass[0] = '\0'; err = ESP_OK; }
-
-    nvs_close(h);
-    return err;
+    if (nvs_open(NVS_NS_WIFI, NVS_READONLY, &h) == ESP_OK) {
+        size_t l = ssid_sz;
+        esp_err_t err = nvs_get_str(h, NVS_KEY_SSID, ssid, &l);
+        if (err == ESP_OK) {
+            l = pass_sz;
+            err = nvs_get_str(h, NVS_KEY_PASS, pass, &l);
+            if (err == ESP_ERR_NVS_NOT_FOUND) { pass[0] = '\0'; err = ESP_OK; }
+            nvs_close(h);
+            return err;
+        }
+        nvs_close(h);
+    }
+    /* NVS unset -- try the compile-time default from secrets.h. */
+    if (WIFI_DEFAULT_SSID[0] != '\0') {
+        strncpy(ssid, WIFI_DEFAULT_SSID, ssid_sz - 1);
+        ssid[ssid_sz - 1] = '\0';
+        strncpy(pass, WIFI_DEFAULT_PASS, pass_sz - 1);
+        pass[pass_sz - 1] = '\0';
+        return ESP_OK;
+    }
+    return ESP_ERR_NVS_NOT_FOUND;
 }
 
 esp_err_t wifi_sta_connect_stored(void)

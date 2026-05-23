@@ -40,7 +40,11 @@ pio run -t upload        # flash via USB
 pio device monitor       # 115200 baud, exception decoder enabled
 ```
 
-First boot brings up a SoftAP named `InkyDash-Setup` (password `inkydash`). Join it from your phone; the captive-portal prompt opens a form for your home WiFi credentials. After submit the device reboots, joins your network, and enters the normal wake cycle.
+First boot brings up a SoftAP named `InkyDash-Setup` (password `inkydash`). Join it from your phone; the captive-portal prompt opens a form for your home WiFi credentials and MQTT broker. After submit the device reboots, joins your network, and enters the normal wake cycle.
+
+### Dev shortcut: `secrets.h`
+
+To skip the captive portal during iteration, copy [include/secrets.example.h](include/secrets.example.h) to `include/secrets.h` and uncomment the `WIFI_DEFAULT_*` / `MQTT_DEFAULT_*` macros you want baked into the build. `secrets.h` is git-ignored. Precedence on each wake is NVS (set via portal) → `secrets.h` values → empty (portal triggers).
 
 ## MQTT contract
 

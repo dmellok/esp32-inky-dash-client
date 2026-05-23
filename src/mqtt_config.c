@@ -29,13 +29,15 @@ void mqtt_config_load(mqtt_config_t *out)
         /* Nothing stored yet -- use compile-time defaults across the board. */
         strncpy(out->uri,   MQTT_DEFAULT_URI,   sizeof(out->uri)   - 1);
         strncpy(out->topic, MQTT_DEFAULT_TOPIC, sizeof(out->topic) - 1);
+        strncpy(out->user,  MQTT_DEFAULT_USER,  sizeof(out->user)  - 1);
+        strncpy(out->pass,  MQTT_DEFAULT_PASS,  sizeof(out->pass)  - 1);
         return;
     }
 
     load_str(h, NVS_KEY_MQTT_URI,   out->uri,   sizeof(out->uri),   MQTT_DEFAULT_URI);
     load_str(h, NVS_KEY_MQTT_TOPIC, out->topic, sizeof(out->topic), MQTT_DEFAULT_TOPIC);
-    load_str(h, NVS_KEY_MQTT_USER,  out->user,  sizeof(out->user),  "");
-    load_str(h, NVS_KEY_MQTT_PASS,  out->pass,  sizeof(out->pass),  "");
+    load_str(h, NVS_KEY_MQTT_USER,  out->user,  sizeof(out->user),  MQTT_DEFAULT_USER);
+    load_str(h, NVS_KEY_MQTT_PASS,  out->pass,  sizeof(out->pass),  MQTT_DEFAULT_PASS);
 
     nvs_close(h);
     ESP_LOGI(TAG, "loaded uri='%s' topic='%s' user='%s'",
