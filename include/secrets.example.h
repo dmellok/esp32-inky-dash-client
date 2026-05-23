@@ -21,10 +21,15 @@
 // #define WIFI_DEFAULT_PASS  "your-password"     /* "" for open networks */
 
 /* ---- MQTT ---------------------------------------------------------- */
-// #define MQTT_DEFAULT_URI   "mqtt://192.168.1.50:1883"   /* mqtts:// for TLS */
-// #define MQTT_DEFAULT_TOPIC "inky/esp32/update"
-// #define MQTT_DEFAULT_USER  "broker-user"       /* leave undefined if open */
-// #define MQTT_DEFAULT_PASS  "broker-pass"
+// #define MQTT_DEFAULT_URI          "mqtt://192.168.1.50:1883"   /* mqtts:// for TLS */
+// #define MQTT_DEFAULT_USER         "broker-user"     /* leave undefined if open */
+// #define MQTT_DEFAULT_PASS         "broker-pass"
+//
+// Topic namespace. Defaults are inky/esp32/{update,config,status} -- override
+// only if you're avoiding a collision with another tenant on a shared broker.
+// #define MQTT_DEFAULT_TOPIC        "inky/esp32/update"   /* image URLs we listen for */
+// #define MQTT_DEFAULT_CONFIG_TOPIC "inky/esp32/config"   /* runtime settings we listen for */
+// #define MQTT_DEFAULT_STATUS_TOPIC "inky/esp32/status"   /* heartbeats we publish */
 
 /* ---- Dev mode ------------------------------------------------------ */
 /* The firmware auto-detects a connected USB host (laptop) and skips deep
