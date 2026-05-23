@@ -95,6 +95,9 @@
 #ifndef MQTT_DEFAULT_TOPIC
 #define MQTT_DEFAULT_TOPIC  "inky/esp32/update"
 #endif
+#ifndef MQTT_DEFAULT_CONFIG_TOPIC
+#define MQTT_DEFAULT_CONFIG_TOPIC "inky/esp32/config"
+#endif
 #ifndef MQTT_DEFAULT_USER
 #define MQTT_DEFAULT_USER   ""
 #endif
@@ -127,3 +130,10 @@
 
 #define NVS_NS_STATE       "state"
 #define NVS_KEY_LAST_HASH  "last_hash"   /* sha256 of last rendered URL */
+#define NVS_KEY_SLEEP_S    "sleep_s"     /* user-configured deep-sleep duration */
+
+/* Sanity bounds on sleep interval. The lower bound stops a publisher
+ * accidentally turning the device into a 1-Hz spinner; the upper bound
+ * is just "this is probably a bug". */
+#define SLEEP_INTERVAL_MIN_S  30
+#define SLEEP_INTERVAL_MAX_S  (7 * 24 * 60 * 60)

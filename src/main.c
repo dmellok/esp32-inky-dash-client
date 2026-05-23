@@ -67,6 +67,25 @@ static void store_hash(const char *hash)
     nvs_close(h);
 }
 
+/* Read the MQTT-configured sleep interval from NVS, falling back to the
+ * compile-time SLEEP_INTERVAL_S default. Clamped defensively in case
+ * something wrote a bad value before the bounds check existed. */
+static int load_sleep_interval_s(void)
+{
+    int32_t v = 0;
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS_STATE, NVS_READONLY, &h) == ESP_OK) {
+        esp_err_t err = nvs_get_i32(h, NVS_KEY_SLEEP_S, &v);
+        nvs_close(h);
+        if (err == ESP_OK &&
+            v >= SLEEP_INTERVAL_MIN_S &&
+            v <= SLEEP_INTERVAL_MAX_S) {
+            return v;
+        }
+    }
+    return SLEEP_INTERVAL_S;
+}
+
 /* ---------- deep sleep ---------- */
 
 static void sleep_forever_or_until_timer(void)
@@ -95,10 +114,13 @@ static void sleep_forever_or_until_timer(void)
         esp_restart();
     }
 
-    ESP_LOGI(TAG, "on battery; deep sleep for %d s", SLEEP_INTERVAL_S);
+    int interval = load_sleep_interval_s();
+    ESP_LOGI(TAG, "on battery; deep sleep for %d s%s",
+             interval,
+             (interval == SLEEP_INTERVAL_S) ? " (default)" : " (set via mqtt)");
     /* epd_sleep() already dropped the panel power rail; no extra cleanup
      * needed before going down. */
-    esp_sleep_enable_timer_wakeup((uint64_t)SLEEP_INTERVAL_S * 1000000ULL);
+    esp_sleep_enable_timer_wakeup((uint64_t)interval * 1000000ULL);
     esp_deep_sleep_start();
     /* not reached */
 }

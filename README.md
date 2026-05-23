@@ -66,6 +66,18 @@ The URL must point to either:
 
 The firmware persists the SHA-256 of the rendered URL in NVS so unchanged retained messages don't trigger needless panel refreshes.
 
+### Runtime config: `inky/esp32/config`
+
+A separate retained topic (default `inky/esp32/config`, overridable via `MQTT_DEFAULT_CONFIG_TOPIC`) lets you change device behaviour without re-flashing. Publish JSON; the firmware applies it on next wake and persists it to NVS so it survives reboots.
+
+Currently honoured:
+
+```json
+{ "sleep_interval_s": 600 }
+```
+
+Clamped to `[30, 604800]` (30 s – 7 days). Bad values are rejected with a log warning and the previously-stored interval is kept. Falls back to the compile-time `SLEEP_INTERVAL_S` (15 min) when NVS is empty.
+
 ## Project layout
 
 ```

@@ -2,12 +2,14 @@
 #include "app_config.h"
 #include "mqtt_config.h"
 
+#include <ctype.h>
 #include <string.h>
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "mqtt_client.h"
+#include "nvs.h"
 
 static const char *TAG = "mqtt";
 
@@ -17,12 +19,15 @@ static const char *TAG = "mqtt";
 typedef struct {
     EventGroupHandle_t events;
     mqtt_job_t *out;
-    const char *topic;     /* topic we subscribed to (for logging) */
+    const char *update_topic;
+    const char *config_topic;
 } ctx_t;
 
+/* ---------- payload parsers ---------- */
+
 /* Cheap-and-good JSON URL extractor. Looks for "url" : "<value>" with
- * tolerance for whitespace and either quote style. Falls back to treating
- * the whole payload as a bare URL if it starts with "http". */
+ * tolerance for whitespace. Falls back to treating the whole payload as
+ * a bare URL if it starts with "http". */
 static bool extract_url(const char *data, size_t len, char *dst, size_t dst_sz)
 {
     if (len == 0) return false;
@@ -33,7 +38,6 @@ static bool extract_url(const char *data, size_t len, char *dst, size_t dst_sz)
             strncmp(data, "https://", 8) == 0)) {
         memcpy(dst, data, len);
         dst[len] = '\0';
-        /* strip trailing whitespace/newlines */
         while (len && (dst[len-1] == ' ' || dst[len-1] == '\r' ||
                        dst[len-1] == '\n' || dst[len-1] == '\t')) {
             dst[--len] = '\0';
@@ -45,7 +49,6 @@ static bool extract_url(const char *data, size_t len, char *dst, size_t dst_sz)
     const char *p = memmem(data, len, "\"url\"", 5);
     if (!p) return false;
     p += 5;
-    /* skip ws, colon, ws, opening quote */
     while (p < data + len && (*p == ' ' || *p == '\t')) p++;
     if (p >= data + len || *p != ':') return false;
     p++;
@@ -62,6 +65,67 @@ static bool extract_url(const char *data, size_t len, char *dst, size_t dst_sz)
     return vlen > 0;
 }
 
+/* Pull a top-level integer field "<key>": <int> out of a JSON payload.
+ * Tolerates whitespace and optional negative sign. */
+static bool extract_int(const char *data, size_t len, const char *key, int32_t *out)
+{
+    char needle[48];
+    int nlen = snprintf(needle, sizeof(needle), "\"%s\"", key);
+    if (nlen <= 0 || nlen >= (int)sizeof(needle)) return false;
+
+    const char *p = memmem(data, len, needle, nlen);
+    if (!p) return false;
+    p += nlen;
+
+    while (p < data + len && (*p == ' ' || *p == '\t')) p++;
+    if (p >= data + len || *p != ':') return false;
+    p++;
+    while (p < data + len && (*p == ' ' || *p == '\t')) p++;
+    if (p >= data + len) return false;
+
+    int sign = 1;
+    if (*p == '-') { sign = -1; p++; }
+    if (p >= data + len || !isdigit((unsigned char)*p)) return false;
+
+    int32_t v = 0;
+    while (p < data + len && isdigit((unsigned char)*p)) {
+        v = v * 10 + (*p - '0');
+        p++;
+    }
+    *out = v * sign;
+    return true;
+}
+
+/* ---------- config-topic side effects ---------- */
+
+static void apply_config_payload(const char *data, size_t len)
+{
+    int32_t interval = 0;
+    if (!extract_int(data, len, "sleep_interval_s", &interval)) {
+        ESP_LOGW(TAG, "config payload had no sleep_interval_s; ignoring");
+        return;
+    }
+    if (interval < SLEEP_INTERVAL_MIN_S || interval > SLEEP_INTERVAL_MAX_S) {
+        ESP_LOGW(TAG, "sleep_interval_s=%ld out of bounds [%d, %d]; ignoring",
+                 (long)interval, SLEEP_INTERVAL_MIN_S, SLEEP_INTERVAL_MAX_S);
+        return;
+    }
+
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS_STATE, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_i32(h, NVS_KEY_SLEEP_S, interval);
+    nvs_commit(h);
+    nvs_close(h);
+    ESP_LOGI(TAG, "saved sleep_interval_s=%ld to NVS", (long)interval);
+}
+
+/* ---------- event handling ---------- */
+
+static bool topic_eq(const char *needle, const char *data, int len)
+{
+    return (int)strlen(needle) == len && strncmp(needle, data, len) == 0;
+}
+
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     ctx_t *ctx = arg;
@@ -69,27 +133,41 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 
     switch ((esp_mqtt_event_id_t)id) {
     case MQTT_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "connected; subscribing to %s", ctx->topic);
-        esp_mqtt_client_subscribe(e->client, ctx->topic, 1);
+        ESP_LOGI(TAG, "connected; subscribing to %s + %s",
+                 ctx->update_topic, ctx->config_topic);
+        esp_mqtt_client_subscribe(e->client, ctx->update_topic, 1);
+        esp_mqtt_client_subscribe(e->client, ctx->config_topic, 1);
         break;
+
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "data on %.*s (%d bytes)",
                  e->topic_len, e->topic, e->data_len);
-        if (extract_url(e->data, e->data_len, ctx->out->url, sizeof(ctx->out->url))) {
-            ESP_LOGI(TAG, "url: %s", ctx->out->url);
-            xEventGroupSetBits(ctx->events, BIT_GOT_MSG);
+        if (topic_eq(ctx->config_topic, e->topic, e->topic_len)) {
+            apply_config_payload(e->data, e->data_len);
+        } else if (topic_eq(ctx->update_topic, e->topic, e->topic_len)) {
+            if (extract_url(e->data, e->data_len,
+                            ctx->out->url, sizeof(ctx->out->url))) {
+                ESP_LOGI(TAG, "url: %s", ctx->out->url);
+                xEventGroupSetBits(ctx->events, BIT_GOT_MSG);
+            } else {
+                ESP_LOGW(TAG, "payload had no usable url");
+            }
         } else {
-            ESP_LOGW(TAG, "payload had no usable url");
+            ESP_LOGW(TAG, "unexpected topic; ignoring");
         }
         break;
+
     case MQTT_EVENT_ERROR:
         ESP_LOGE(TAG, "mqtt error");
         xEventGroupSetBits(ctx->events, BIT_FAILED);
         break;
+
     default:
         break;
     }
 }
+
+/* ---------- public API ---------- */
 
 esp_err_t mqtt_fetch_retained(mqtt_job_t *job)
 {
@@ -102,7 +180,8 @@ esp_err_t mqtt_fetch_retained(mqtt_job_t *job)
     ctx_t ctx = {
         .events = xEventGroupCreate(),
         .out = job,
-        .topic = cfg_nvs.topic,
+        .update_topic = cfg_nvs.topic,
+        .config_topic = MQTT_DEFAULT_CONFIG_TOPIC,
     };
 
     esp_mqtt_client_config_t cfg = {
