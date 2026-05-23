@@ -25,3 +25,11 @@
 // #define MQTT_DEFAULT_TOPIC "inky/esp32/update"
 // #define MQTT_DEFAULT_USER  "broker-user"       /* leave undefined if open */
 // #define MQTT_DEFAULT_PASS  "broker-pass"
+
+/* ---- Dev mode ------------------------------------------------------ */
+/* Replace the 15-min deep sleep with a short delay + software restart
+ * loop, so you can publish/test/repeat without waiting. The cold-boot
+ * splash is skipped on software restart, so each iteration is fast
+ * (~10 s instead of ~40 s with splash). Comment out for production. */
+// #define DEV_DISABLE_SLEEP
+// #define DEV_LOOP_INTERVAL_S 10                /* defaults to 10 */

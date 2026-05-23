@@ -70,11 +70,17 @@ static void store_hash(const char *hash)
 
 static void sleep_forever_or_until_timer(void)
 {
+#ifdef DEV_DISABLE_SLEEP
+    ESP_LOGI(TAG, "DEV mode: software restart in %d s", DEV_LOOP_INTERVAL_S);
+    vTaskDelay(pdMS_TO_TICKS(DEV_LOOP_INTERVAL_S * 1000));
+    esp_restart();
+#else
     ESP_LOGI(TAG, "deep sleep for %d s", SLEEP_INTERVAL_S);
     /* epd_sleep() already dropped the panel power rail; no extra cleanup
      * needed before going down. */
     esp_sleep_enable_timer_wakeup((uint64_t)SLEEP_INTERVAL_S * 1000000ULL);
     esp_deep_sleep_start();
+#endif
     /* not reached */
 }
 
@@ -93,13 +99,15 @@ static void run_provisioning_then_reboot(void)
     esp_restart();
 }
 
-/* Show the panel palette sweep on a cold boot (RESET press or power-on),
- * but NOT on a timer-driven deep-sleep wake -- the splash takes ~30 s and
- * we don't want to burn that every 15 min in normal operation. Lets the
- * user re-trigger the diagnostic any time without wiping NVS. */
-static void maybe_show_splash(esp_sleep_wakeup_cause_t cause)
+/* Show the splash on a true cold boot -- power-on or RESET button. Skip
+ * it on timer-wake (production sleep cycle) AND on software restart
+ * (DEV_DISABLE_SLEEP loop iterations), so we don't burn 25-30 s of panel
+ * refresh on every quick test cycle. */
+static void maybe_show_splash(esp_reset_reason_t reset_reason)
 {
-    if (cause == ESP_SLEEP_WAKEUP_TIMER) return;
+    if (reset_reason != ESP_RST_POWERON && reset_reason != ESP_RST_EXT) {
+        return;
+    }
     ESP_LOGI(TAG, "cold boot; showing splash");
     if (epd_port_init() != ESP_OK) {
         ESP_LOGW(TAG, "panel init failed; skipping splash");
@@ -112,12 +120,13 @@ static void maybe_show_splash(esp_sleep_wakeup_cause_t cause)
 
 void app_main(void)
 {
-    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-    ESP_LOGI(TAG, "boot; wakeup cause=%d", cause);
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+    ESP_LOGI(TAG, "boot; reset_reason=%d wakeup_cause=%d",
+             reset_reason, esp_sleep_get_wakeup_cause());
 
     ESP_ERROR_CHECK(wifi_manager_init());
 
-    maybe_show_splash(cause);
+    maybe_show_splash(reset_reason);
 
     if (!wifi_creds_present()) {
         run_provisioning_then_reboot();

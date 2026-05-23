@@ -105,6 +105,15 @@
 #define MQTT_CLIENT_ID      "esp-inky-dash"
 #endif
 
+/* Dev shortcut: define DEV_DISABLE_SLEEP (in secrets.h) to swap the
+ * 15-min deep sleep for a short delay + software restart loop. Useful
+ * while iterating with the serial monitor open. Cold-boot splash only
+ * fires on power-on / RESET button, not on the software restart, so
+ * each iteration is fast. */
+#ifndef DEV_LOOP_INTERVAL_S
+#define DEV_LOOP_INTERVAL_S 10
+#endif
+
 /* NVS namespaces / keys */
 #define NVS_NS_WIFI        "wifi"
 #define NVS_KEY_SSID       "ssid"
