@@ -93,11 +93,31 @@ static void run_provisioning_then_reboot(void)
     esp_restart();
 }
 
+/* Show the panel palette sweep on a cold boot (RESET press or power-on),
+ * but NOT on a timer-driven deep-sleep wake -- the splash takes ~30 s and
+ * we don't want to burn that every 15 min in normal operation. Lets the
+ * user re-trigger the diagnostic any time without wiping NVS. */
+static void maybe_show_splash(esp_sleep_wakeup_cause_t cause)
+{
+    if (cause == ESP_SLEEP_WAKEUP_TIMER) return;
+    ESP_LOGI(TAG, "cold boot; showing splash");
+    if (epd_port_init() != ESP_OK) {
+        ESP_LOGW(TAG, "panel init failed; skipping splash");
+        return;
+    }
+    epd_init();
+    epd_show_color_bars();
+    epd_sleep();
+}
+
 void app_main(void)
 {
-    ESP_LOGI(TAG, "boot; wakeup cause=%d", esp_sleep_get_wakeup_cause());
+    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+    ESP_LOGI(TAG, "boot; wakeup cause=%d", cause);
 
     ESP_ERROR_CHECK(wifi_manager_init());
+
+    maybe_show_splash(cause);
 
     if (!wifi_creds_present()) {
         run_provisioning_then_reboot();

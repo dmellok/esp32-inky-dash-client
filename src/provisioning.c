@@ -1,5 +1,6 @@
 #include "provisioning.h"
 #include "app_config.h"
+#include "mqtt_config.h"
 #include "wifi_manager.h"
 
 #include <string.h>
@@ -88,17 +89,35 @@ static const char k_form_html[] =
 "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
 "<title>Inky Dash Setup</title>"
 "<style>"
-"body{font-family:system-ui,sans-serif;max-width:380px;margin:2em auto;padding:0 1em;color:#222}"
-"h1{font-size:1.3em}label{display:block;margin:1em 0 .3em}"
+"body{font-family:system-ui,sans-serif;max-width:420px;margin:1.5em auto;padding:0 1em;color:#222}"
+"h1{font-size:1.3em}h2{font-size:1.05em;margin:1.8em 0 .2em;color:#555}"
+"label{display:block;margin:.9em 0 .3em;font-size:.95em}"
 "input{width:100%;padding:.6em;font-size:1em;box-sizing:border-box}"
+"small{display:block;color:#888;margin-top:.25em;font-size:.8em}"
 "button{margin-top:1.5em;padding:.7em 1.2em;font-size:1em;width:100%}"
 "</style></head><body>"
-"<h1>Inky Dash WiFi Setup</h1>"
+"<h1>Inky Dash Setup</h1>"
 "<form method=\"POST\" action=\"/save\">"
-"<label>Network name (SSID)</label>"
+
+"<h2>WiFi</h2>"
+"<label>Network name (SSID) *</label>"
 "<input name=\"ssid\" required maxlength=\"32\" autocomplete=\"off\">"
 "<label>Password</label>"
 "<input name=\"pass\" type=\"password\" maxlength=\"64\" autocomplete=\"off\">"
+
+"<h2>MQTT broker</h2>"
+"<label>Broker URI *</label>"
+"<input name=\"mqtt_uri\" required maxlength=\"159\" autocomplete=\"off\" "
+"placeholder=\"mqtt://192.168.1.50:1883\">"
+"<small>Use <code>mqtts://</code> for TLS.</small>"
+"<label>Topic</label>"
+"<input name=\"mqtt_topic\" maxlength=\"95\" autocomplete=\"off\" "
+"placeholder=\"" MQTT_DEFAULT_TOPIC "\">"
+"<label>Username (optional)</label>"
+"<input name=\"mqtt_user\" maxlength=\"63\" autocomplete=\"off\">"
+"<label>Password (optional)</label>"
+"<input name=\"mqtt_pass\" type=\"password\" maxlength=\"63\" autocomplete=\"off\">"
+
 "<button type=\"submit\">Save &amp; restart</button>"
 "</form></body></html>";
 
@@ -152,7 +171,9 @@ static esp_err_t h_root(httpd_req_t *req)
 
 static esp_err_t h_save(httpd_req_t *req)
 {
-    char body[256];
+    /* Form is now ~6 fields with URI + topic + creds; budget room for the
+     * longest legitimate POST body (~750 bytes after URL-encoding). */
+    char body[1024];
     int total = 0;
     while (total < (int)sizeof(body) - 1) {
         int n = httpd_req_recv(req, body + total, sizeof(body) - 1 - total);
@@ -161,16 +182,32 @@ static esp_err_t h_save(httpd_req_t *req)
     }
     body[total] = '\0';
 
-    char ssid[33] = {0}, pass[65] = {0};
+    char ssid[33] = {0}, wpa_pass[65] = {0};
+    char mqtt_uri[160] = {0}, mqtt_topic[96] = {0};
+    char mqtt_user[64] = {0}, mqtt_pass[64] = {0};
+
     if (!form_field(body, "ssid", ssid, sizeof(ssid)) || !ssid[0]) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "ssid required");
         return ESP_FAIL;
     }
-    form_field(body, "pass", pass, sizeof(pass));
+    if (!form_field(body, "mqtt_uri", mqtt_uri, sizeof(mqtt_uri)) || !mqtt_uri[0]) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "mqtt broker uri required");
+        return ESP_FAIL;
+    }
+    form_field(body, "pass",       wpa_pass,   sizeof(wpa_pass));
+    form_field(body, "mqtt_topic", mqtt_topic, sizeof(mqtt_topic));
+    form_field(body, "mqtt_user",  mqtt_user,  sizeof(mqtt_user));
+    form_field(body, "mqtt_pass",  mqtt_pass,  sizeof(mqtt_pass));
 
-    ESP_LOGI(TAG, "saving creds for '%s'", ssid);
-    if (wifi_creds_save(ssid, pass) != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "nvs write failed");
+    ESP_LOGI(TAG, "saving wifi='%s' mqtt='%s' topic='%s'",
+             ssid, mqtt_uri, mqtt_topic[0] ? mqtt_topic : "(default)");
+
+    if (wifi_creds_save(ssid, wpa_pass) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "wifi nvs write failed");
+        return ESP_FAIL;
+    }
+    if (mqtt_config_save(mqtt_uri, mqtt_topic, mqtt_user, mqtt_pass) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "mqtt nvs write failed");
         return ESP_FAIL;
     }
 

@@ -323,6 +323,63 @@ void epd_display(const uint8_t *image)
     trigger_refresh();
 }
 
+void epd_show_color_bars(void)
+{
+    /* Six horizontal bands, full panel width. Each band is HEIGHT/6 = 266
+     * rows tall, with the final band absorbing the 4-row remainder. We
+     * stream one half-row (300 bytes) per band repeated N times, rather
+     * than allocating a full 480 KB scratch buffer for a constant pattern. */
+    static const uint8_t palette[6] = {
+        EPD_COL_BLACK, EPD_COL_WHITE,  EPD_COL_YELLOW,
+        EPD_COL_RED,   EPD_COL_BLUE,   EPD_COL_GREEN,
+    };
+    const size_t HALF_ROW = EPD_WIDTH / 4;     /* 300 */
+    uint8_t row[HALF_ROW];
+
+    for (int side = 0; side < 2; side++) {
+        gpio_set_level(side == 0 ? EPD_PIN_CS_M : EPD_PIN_CS_S, 0);
+        send_cmd(DTM);
+        for (int b = 0; b < 6; b++) {
+            uint8_t packed = (palette[b] << 4) | palette[b];
+            memset(row, packed, HALF_ROW);
+
+            size_t band_h = EPD_HEIGHT / 6;
+            if (b == 5) band_h += EPD_HEIGHT % 6;
+            for (size_t r = 0; r < band_h; r++) {
+                send_data_buf(row, HALF_ROW);
+            }
+        }
+        cs_both(1);
+    }
+    trigger_refresh();
+}
+
+void epd_show_palette_sweep(void)
+{
+    /* 8 horizontal bands of HEIGHT/8 = 200 rows each, one per possible
+     * nibble value 0x0..0x7. Stream a 300-byte half-row N times per band
+     * rather than allocating a 480 KB scratch -- this pattern compresses
+     * trivially to a memset. */
+    const size_t HALF_ROW = EPD_WIDTH / 4;     /* 300 */
+    const size_t BAND_H   = EPD_HEIGHT / 8;    /* 200 */
+    uint8_t row[HALF_ROW];
+
+    for (int side = 0; side < 2; side++) {
+        /* side 0 = left controller (CS_M), side 1 = right (CS_S) */
+        gpio_set_level(side == 0 ? EPD_PIN_CS_M : EPD_PIN_CS_S, 0);
+        send_cmd(DTM);
+        for (uint8_t n = 0; n < 8; n++) {
+            uint8_t packed = (n << 4) | n;
+            memset(row, packed, HALF_ROW);
+            for (size_t r = 0; r < BAND_H; r++) {
+                send_data_buf(row, HALF_ROW);
+            }
+        }
+        cs_both(1);
+    }
+    trigger_refresh();
+}
+
 void epd_sleep(void)
 {
     cs_both(0);

@@ -1,5 +1,6 @@
 #include "mqtt_handler.h"
 #include "app_config.h"
+#include "mqtt_config.h"
 
 #include <string.h>
 
@@ -16,6 +17,7 @@ static const char *TAG = "mqtt";
 typedef struct {
     EventGroupHandle_t events;
     mqtt_job_t *out;
+    const char *topic;     /* topic we subscribed to (for logging) */
 } ctx_t;
 
 /* Cheap-and-good JSON URL extractor. Looks for "url" : "<value>" with
@@ -67,8 +69,8 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 
     switch ((esp_mqtt_event_id_t)id) {
     case MQTT_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "connected; subscribing to %s", MQTT_TOPIC_UPDATE);
-        esp_mqtt_client_subscribe(e->client, MQTT_TOPIC_UPDATE, 1);
+        ESP_LOGI(TAG, "connected; subscribing to %s", ctx->topic);
+        esp_mqtt_client_subscribe(e->client, ctx->topic, 1);
         break;
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "data on %.*s (%d bytes)",
@@ -94,16 +96,25 @@ esp_err_t mqtt_fetch_retained(mqtt_job_t *job)
     if (!job) return ESP_ERR_INVALID_ARG;
     memset(job, 0, sizeof(*job));
 
+    mqtt_config_t cfg_nvs;
+    mqtt_config_load(&cfg_nvs);
+
     ctx_t ctx = {
         .events = xEventGroupCreate(),
         .out = job,
+        .topic = cfg_nvs.topic,
     };
 
     esp_mqtt_client_config_t cfg = {
-        .broker.address.uri = MQTT_BROKER_URI,
+        .broker.address.uri = cfg_nvs.uri,
         .credentials.client_id = MQTT_CLIENT_ID,
         .session.keepalive = 30,
     };
+    if (cfg_nvs.user[0]) {
+        cfg.credentials.username = cfg_nvs.user;
+        cfg.credentials.authentication.password = cfg_nvs.pass;
+    }
+
     esp_mqtt_client_handle_t cli = esp_mqtt_client_init(&cfg);
     if (!cli) { vEventGroupDelete(ctx.events); return ESP_FAIL; }
 

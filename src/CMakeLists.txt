@@ -4,6 +4,7 @@ idf_component_register(
         "epd_driver.c"
         "wifi_manager.c"
         "provisioning.c"
+        "mqtt_config.c"
         "mqtt_handler.c"
         "image_fetcher.c"
         "image_decoder.c"

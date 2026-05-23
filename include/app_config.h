@@ -60,24 +60,32 @@
 #define PROVISION_AP_PASS    "inkydash"     /* >= 8 chars or use open AP */
 
 /* ------------------------------------------------------------------ */
-/* MQTT contract (matches inky_mqtt.py topic conventions)             */
+/* MQTT contract                                                      */
 /* ------------------------------------------------------------------ */
-/* Override any of these at compile time with -D, or via menuconfig if
- * you'd rather Kconfig them. Defaults match the Python listener. */
-#ifndef MQTT_BROKER_URI
-#define MQTT_BROKER_URI    "mqtt://homeassistant.local:1883"
+/* These are FALLBACKS used only if NVS doesn't have user-set values
+ * (e.g. an early boot that crashed before provisioning finished). The
+ * captive portal writes user-supplied broker URI / topic / credentials
+ * into NVS and mqtt_handler reads from there. */
+#ifndef MQTT_DEFAULT_URI
+#define MQTT_DEFAULT_URI    "mqtt://homeassistant.local:1883"
 #endif
-#ifndef MQTT_TOPIC_UPDATE
-#define MQTT_TOPIC_UPDATE  "inky/update"
+#ifndef MQTT_DEFAULT_TOPIC
+#define MQTT_DEFAULT_TOPIC  "inky/esp32/update"
 #endif
 #ifndef MQTT_CLIENT_ID
-#define MQTT_CLIENT_ID     "esp-inky-dash"
+#define MQTT_CLIENT_ID      "esp-inky-dash"
 #endif
 
-/* NVS namespace and keys */
+/* NVS namespaces / keys */
 #define NVS_NS_WIFI        "wifi"
 #define NVS_KEY_SSID       "ssid"
 #define NVS_KEY_PASS       "pass"
+
+#define NVS_NS_MQTT        "mqtt"
+#define NVS_KEY_MQTT_URI   "uri"
+#define NVS_KEY_MQTT_TOPIC "topic"
+#define NVS_KEY_MQTT_USER  "user"
+#define NVS_KEY_MQTT_PASS  "pass"
 
 #define NVS_NS_STATE       "state"
 #define NVS_KEY_LAST_HASH  "last_hash"   /* sha256 of last rendered URL */
