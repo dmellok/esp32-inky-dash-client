@@ -1,0 +1,25 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "epd_driver.c"
+        "wifi_manager.c"
+        "provisioning.c"
+        "mqtt_handler.c"
+        "image_fetcher.c"
+        "image_decoder.c"
+    INCLUDE_DIRS
+        "."
+        "../include"
+    REQUIRES
+        driver
+        esp_event
+        esp_http_client
+        esp_http_server
+        esp_netif
+        esp_wifi
+        esp-tls
+        mqtt
+        nvs_flash
+        mbedtls
+        lwip
+)
