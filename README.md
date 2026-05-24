@@ -1,10 +1,10 @@
-# ESP-Inky-Dash-Client
+# ESP32 Inky Dash Client
 
 Battery-powered ESP32-S3 firmware for the [Waveshare ESP32-S3-ePaper-13.3E6](https://www.waveshare.com/esp32-s3-epaper-13.3e6.htm) — a 13.3", 1200×1600, 6-colour Spectra E6 e-paper panel paired with an ESP32-S3-WROOM-2-N32R16V module.
 
 The device wakes on a timer, publishes a heartbeat with its battery state, pulls a retained MQTT message containing an image URL, refreshes the panel if the image has changed, and goes back to deep sleep. WiFi credentials and MQTT broker details are provisioned on first boot via a SoftAP captive portal.
 
-This is the embedded counterpart to the Pi-side [Inky_Dash_Listener](https://github.com/dmellok/Inky_Dash_Listener) MQTT daemon, designed so the same broker can drive either a Pi-attached Inky Impression or this battery-powered standalone unit — the firmware listens on its own `inky/esp32/*` topic namespace so both can coexist on one broker.
+This is the embedded counterpart to the Pi-side [pi-inky-dash-client](https://github.com/dmellok/pi-inky-dash-client) MQTT daemon, designed so the same broker can drive either a Pi-attached Inky Impression or this battery-powered standalone unit — the firmware listens on its own `inky/esp32/*` topic namespace so both can coexist on one broker.
 
 ## Hardware
 
@@ -137,7 +137,7 @@ For "months of usage" with a typical update cadence, a 5000–10000 mAh single-c
 ## Project layout
 
 ```
-ESP-Inky-Dash-Client/
+esp32-inky-dash-client/
 ├── platformio.ini             # board, partitions, monitor settings
 ├── partitions.csv             # 14 MB factory app + NVS
 ├── sdkconfig.defaults         # PSRAM, mbedTLS cert bundle, MQTT 3.1.1
