@@ -6,6 +6,12 @@ The device wakes on a timer, publishes a heartbeat with its battery state, pulls
 
 This is the embedded counterpart to the Pi-side [pi-inky-dash-client](https://github.com/dmellok/pi-inky-dash-client) MQTT daemon, designed so the same broker can drive either a Pi-attached Inky Impression or this battery-powered standalone unit — the firmware listens on its own `inky/esp32/*` topic namespace so both can coexist on one broker.
 
+## Companion app
+
+Frames are produced by [Inky Dash](https://github.com/dmellok/inky-dash) — a Flask + Lit + Playwright app that composes dashboards in the browser, snapshots them to PNG via Playwright, packs the result into the panel-native 4-bpp `.bin` format described in the [MQTT contract](#mqtt-contract) below, and publishes the URL over MQTT. The firmware itself does no rendering: it fetches whatever URL the broker hands it on `inky/esp32/update` and streams the bytes to SPI. Inky Dash also reads `inky/esp32/status` to show battery / RSSI in its header and publishes `inky/esp32/config` to retune the sleep interval without re-flashing.
+
+If you're writing your own producer instead of using Inky Dash, the wire contract below (topics, payload shapes, and the panel-native `.bin` packing) is everything you need.
+
 ## Hardware
 
 | Component | Detail |
@@ -57,15 +63,15 @@ For fast iteration without USB plugged in (e.g. headless testing), also define `
 
 ## MQTT contract
 
-The firmware uses three topics under the `inky/esp32/` namespace. The update and config topics are read on every wake; the status topic is written on every wake.
+The firmware uses three topics under the `inky/esp32/` namespace. The update and config topics are read on every wake; the status topic is written on every wake. Subscribe / publish wiring lives in [src/mqtt_handler.c](src/mqtt_handler.c); payload formatting for the heartbeat is in [src/heartbeat.c](src/heartbeat.c); defaults are in [include/app_config.h](include/app_config.h).
 
-| Topic | Direction | Retained | Purpose |
-|---|---|---|---|
-| `inky/esp32/update` | publisher → device | yes | URL of the next image to render |
-| `inky/esp32/config` | publisher → device | yes | Runtime device settings |
-| `inky/esp32/status` | device → broker | yes | Wake-time heartbeat |
+| Topic | Direction | Retained | QoS | Purpose | Source |
+|---|---|---|---|---|---|
+| `inky/esp32/update` | publisher → device | yes | 1 | URL of the next image to render | [mqtt_handler.c:140](src/mqtt_handler.c#L140) |
+| `inky/esp32/config` | publisher → device | yes | 1 | Runtime device settings | [mqtt_handler.c:141](src/mqtt_handler.c#L141), [:103-122](src/mqtt_handler.c#L103-L122) |
+| `inky/esp32/status` | device → broker | yes | 1 | Wake-time heartbeat | [mqtt_handler.c:146-148](src/mqtt_handler.c#L146-L148), [heartbeat.c:113-115](src/heartbeat.c#L113-L115) |
 
-All topic names are overridable in `secrets.h` (`MQTT_DEFAULT_TOPIC`, `MQTT_DEFAULT_CONFIG_TOPIC`, `MQTT_DEFAULT_STATUS_TOPIC`).
+All three topic names are overridable in `secrets.h` (`MQTT_DEFAULT_TOPIC`, `MQTT_DEFAULT_CONFIG_TOPIC`, `MQTT_DEFAULT_STATUS_TOPIC`). The update topic is additionally runtime-overridable via the captive portal (stored in NVS); the config and status topics are compile-time only.
 
 ### Update payload
 
@@ -81,7 +87,7 @@ https://example.com/dashboard.bin
 
 The URL must point to either:
 
-1. **Panel-native raw frame** (recommended for battery efficiency) — exactly 960,000 bytes of packed 4 bpp nibbles, 1600 rows × 600 bytes/row. The left half of each row (300 bytes) goes to the left controller, the right half to the right controller. Palette values: `0`=black, `1`=white, `2`=yellow, `3`=red, `5`=blue, `6`=green. URLs ending in `.bin` or `.epd`, or served with `Content-Type: application/octet-stream`, are auto-detected.
+1. **Panel-native raw frame** (recommended for battery efficiency) — exactly 960,000 bytes (`width × height / 2`) of packed 4 bpp nibbles, 1600 rows × 600 bytes/row. Two pixels per byte: the **high nibble holds the even column** (x = 0, 2, 4 …) and the low nibble the odd column. The left half of each row (300 bytes, columns 0–599) is streamed to the left controller; the right half (columns 600–1199) to the right controller — see `epd_display` in [src/epd_driver.c:288](src/epd_driver.c#L288). Palette values: `0`=black, `1`=white, `2`=yellow, `3`=red, `5`=blue, `6`=green (`4` and `7` reserved). URLs ending in `.bin` or `.epd`, or served with `Content-Type: application/octet-stream`, are auto-detected; the size-matches check in [src/image_decoder.c](src/image_decoder.c) also accepts any 960,000-byte body. The Inky Dash companion produces this format natively.
 2. **JPEG / PNG** — *not yet implemented in v1*. The decoder dispatch in [src/image_decoder.c](src/image_decoder.c) has a clearly marked TODO block describing exactly what to add (pull in `espressif/esp_new_jpeg` via the IDF component manager, decode to RGB888 at panel resolution, Floyd-Steinberg dither to the 6-colour palette).
 
 The firmware persists the SHA-256 of the rendered URL in NVS so unchanged retained messages don't trigger needless panel refreshes.
